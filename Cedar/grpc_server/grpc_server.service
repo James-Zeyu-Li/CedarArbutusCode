@@ -1,0 +1,12 @@
+[unit]
+Description=gRPC Server for Task Submission
+After=network.target
+
+[Service]
+User=zeyu167
+WorkingDirectory=/scratch/zeyu167/grpc_server
+ExecStart=/usr/bin/python3 /scratch/zeyu167/grpc_server/grpc_server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,95 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author zeyu167 and KSmith
+    Description: GRPC Ollama KGgen (and uv)
+
+%files
+    pyproject.toml /app/pyproject.toml
+    uv.lock /app/uv.lock
+
+%post
+    # temp folders and log folders
+    WORKDIR=/tmp/build
+    LOGDIR=/var/log/ollama
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    # create folder and cd into work folder
+    mkdir -p $WORKDIR
+    cd $WORKDIR
+    apt-get update && apt-get install -y python3 python3-pip python3-venv wget curl ca-certificates
+
+    #install grpcio
+    pip3 install grpcio grpcio-tools
+
+    #======= KGGen installation with cirtificates =========
+    echo "Installing ollama dependencies"
+    wget -O /var/tmp/kg_gen-0.1.6-py3-none-any.whl https://files.pythonhosted.org/packages/bf/3c/600a3b0dce48825fe197c94e89abe5de46bb820fb304a1f3a1b846ff2413/kg_gen-0.1.6-py3-none-any.whl
+    pip3 install /var/tmp/kg_gen-0.1.6-py3-none-any.whl
+    mkdir -p /etc/pki/tls/certs
+    ln -sf /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
+    cd /
+    rm -rf $WORKDIR
+
+    #======= uv installation =========
+    echo "Installing uv"
+    curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -c /usr/local/bin
+    export PATH="/root/.local/bin/:$PATH"
+
+    echo "Syncing uv packages with container"
+    #create a python virtual environment
+    uv venv /app/.venv
+    . /app/.venv/bin/activate
+    export UV_PROJECT_ENVIRONMENT=/app/.venv
+
+    export UV_LINK_MODE=copy
+    cd /app
+    uv sync --locked --no-dev --no-install-project
+    cd /
+
+    #======= Ollama installation with Grphic Card Support =========
+    echo "Installing ollama dependencies"
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+    dpkg -i cuda-keyring_1.1-1_all.deb
+    rm cuda-keyring_1.1-1_all.deb
+    apt-get update
+    apt-get -y install pciutils cuda-toolkit-12-8 cuda-drivers
+
+    # create directory for Ollama and Ollama Log
+    mkdir -p $LOGDIR /opt/ollama-storage
+    chmod -R 755 /opt/ollama-storage
+    touch $LOGDIR/ollama.log
+    chmod 666 $LOGDIR/ollama.log
+
+    # download and Run Ollama
+    wget -O /var/tmp/ollama_install.sh https://ollama.com/install.sh
+    chmod +x /var/tmp/ollama_install.sh
+    OLLAMA_HOME=/opt/ollama-storage /var/tmp/ollama_install.sh
+
+    #======== phi4 is not pulled from here, pulled when the script runs.======
+
+    # clean the packages
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export PATH="/root/.local/bin:/usr/local/bin:$PATH"
+    export OLLAMA_HOST=0.0.0.0
+    export OLLAMA_HOME=/opt/ollama-storage
+    export UV_PROJECT_ENVIRONMENT="/app/.venv"
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+
+%startscript
+    echo "Starting Ollama phi4 service..."
+    ollama serve  > /var/log/ollama/ollama.log 2>&1 &
+    sleep 5
+    echo "phi4 service started. Log output:"
+    tail -f /var/log/ollama/ollama.log
+
+%runscript
+    echo "[INFO] Ollama phi4 service is running."
+    exec /bin/bash

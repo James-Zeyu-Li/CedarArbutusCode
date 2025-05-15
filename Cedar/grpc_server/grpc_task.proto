@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package grpc_task;
+
+service TaskService {
+    rpc SubmitTask(stream TaskRequest) returns (stream TaskResponse); 
+}
+
+message TaskRequest {
+    string task_name = 1;
+    string input_data = 2;
+    bytes file_content = 3;  
+    string file_name = 4;   
+}
+
+message TaskResponse {
+    string job_id = 1;     
+    string status = 2;
+    string output_url = 3;
+}

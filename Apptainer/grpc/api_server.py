@@ -46,7 +46,7 @@ async def check_job_status(job_id, server_address):
     return "Error", ""
 
 
-async def wait_for_job_completion(job_id, server_address, timeout=3600, check_interval=10):
+async def wait_for_job_completion(job_id, server_address, timeout=1200, check_interval=10):
     start_time = time.time()
     while time.time() - start_time < timeout:
         status, output_url = await check_job_status(job_id, server_address)
@@ -61,33 +61,21 @@ async def wait_for_job_completion(job_id, server_address, timeout=3600, check_in
     return "Timeout finished", ""
 
 
+# This is based on a shared file system which does not work currently
 async def download_results(output_url, download_dir):
-    if not output_url.startswith("file://"):
-        logger.error(f"Unsupported URL: {output_url}")
-        return None
     src = output_url[len("file://"):]
-    if not os.path.exists(src):
-        logger.error(f"Result file not found: {src}")
-        return None
     os.makedirs(download_dir, exist_ok=True)
     if src.lower().endswith(".zip"):
-        try:
-            with zipfile.ZipFile(src, 'r') as z:
-                z.extractall(download_dir)
-            logger.info(f"Unzipped result to: {download_dir}")
-            return download_dir
-        except zipfile.BadZipFile as e:
-            logger.error(f"ZIP extraction failed: {e}")
-            return None
+        with zipfile.ZipFile(src, 'r') as z:
+            z.extractall(download_dir)
+        logger.info(f"Unzipped result to: {download_dir}")
+        return download_dir
+
     else:
         dest = os.path.join(download_dir, os.path.basename(src))
-        try:
-            shutil.copy2(src, dest)
-            logger.info(f"Copied result to: {dest}")
-            return dest
-        except Exception as e:
-            logger.error(f"File copy failed: {e}")
-            return None
+        shutil.copy2(src, dest)
+        logger.info(f"Copied result to: {dest}")
+        return dest
 
 
 async def process_pdf(pdf_path, server_address=DEFAULT_SERVER, download_dir=RESULTS_DIR):
